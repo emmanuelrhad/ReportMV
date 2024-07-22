@@ -1,0 +1,300 @@
+<?xml version="1.0" encoding="UTF-8"?><StiSerializer application="StiReport" type="Java" version="1.2"><CalculationMode>Interpretation</CalculationMode><Dictionary Ref="1" isKey="true" type="Dictionary"><BusinessObjects count="0" isList="true"/><Databases count="1" isList="true"><database Ref="2" isKey="true" type="Stimulsoft.Report.Dictionary.StiOracleDatabase"><Alias>database</Alias></database></Databases><DataSources count="1" isList="true"><FONTE Ref="3" isKey="true" type="Stimulsoft.Report.Dictionary.StiSqlSource"><Alias>FONTE</Alias><Columns count="23" isList="true"><value>CD_ATENDIMENTO,System.Int32</value><value>CD_ITPRE_MED,System.Double</value><value>CD_PACIENTE,System.Double</value><value>CD_PRE_MED,System.Double</value><value>CICLO,System.String</value><value>DS_PROTOCOLO,System.String</value><value>DS_TIP_PRESC_ITEM,System.String</value><value>DS_UNIDADE_ITEM,System.String</value><value>DS_UNIDADE_PRINCIPAL,System.String</value><value>DT_NASCIMENTO,System.String</value><value>DT_PRE_MED,System.DateTime</value><value>ESTABILIDADE,System.String</value><value>ITEM_PRINCIPAL,System.String</value><value>NM_CONVENIO,System.String</value><value>NM_PACIENTE,System.String</value><value>NM_PRESTADOR,System.String</value><value>NR_DIA,System.Double</value><value>NR_ORDEM,System.Double</value><value>OBSERVACAO,System.String</value><value>TEMPO_INFUSAO,System.String</value><value>VIA,System.String</value><value>VL_COMP,System.Double</value><value>VL_TOTAL,System.Double</value></Columns><CommandTimeout>40</CommandTimeout><DataName>database</DataName><Dictionary isRef="1"/><Name>FONTE</Name><NameInSource>database</NameInSource><Parameters count="0" isList="true"/><SqlCommand>SELECT /*+rule*/ distinct pre_med.cd_atendimento, pre_med.cd_pre_med, convenio.nm_convenio, pre_med.dt_pre_med,
+         paciente.cd_paciente, paciente.nm_paciente, to_char(paciente.dt_nascimento,'dd/mm/yyyy') dt_nascimento, itpre_med.cd_itpre_med,
+         --solsai_pro.cd_solsai_pro,
+         tip_presc.ds_tip_presc item_principal,
+         itpre_med.qt_itpre_med   
+         --itpre_med.qt_itpre_med * uni_pro.vl_fator
+         || ' '
+         || uni_pro.cd_unidade ds_unidade_principal,        
+         --|| uni_pro.ds_unidade ds_unidade_principal,
+         case
+            when comp.cd_tip_esq is not null then
+         '|--&gt; ' || comp.ds_tip_presc
+         end ds_tip_presc_item,       
+         case
+            when comp.cd_tip_esq is not null then 
+            comp.qt_componente * uni_pro_item.vl_fator
+         || ' '
+         || uni_pro_item.cd_unidade
+         --|| uni_pro_item.ds_unidade
+         end  ds_unidade_item,
+         produto_estabilidade.vl_tempo_validade || ' ' ||produto_estabilidade.tp_tempo_validade estabilidade,
+         decode(produto_estabilidade.nr_tempo_infusao,null,null,produto_estabilidade.nr_tempo_infusao || ' ' || produto_estabilidade.tp_tempo_infusao) tempo_infusao,
+         case
+            when uni_pro_item.cd_unidade = 'ML' then comp.qt_componente * uni_pro_item.vl_fator 
+            when prod_item.cd_dcb is not null and prod_item.cd_sican is not null then round(((comp.qt_componente * to_number(prod_item.cd_dcb, '9G999D99')) / to_number(prod_item.cd_sican, '9G999D99')),2)            
+            else 0
+         end vl_comp,
+         itpre_med.ds_itpre_med observacao,
+         for_apl.cd_for_apl || '-' || for_apl.ds_for_apl via,
+         protocolo.ds_protocolo, 
+         prestador.nm_prestador, hritpre_med.nr_dia,
+         pre_med.nr_ciclo || ' / D' || nr_sessao AS ciclo,
+         case
+            when uni_pro.cd_unidade = 'ML' then itpre_med.qt_itpre_med * uni_pro.vl_fator 
+            when produto.cd_dcb is not null and produto.cd_sican is not null then round(((itpre_med.qt_itpre_med * to_number(produto.cd_dcb, '9G999D99')) / to_number(produto.cd_sican, '999999.99')),2) 
+            else 0
+         end vl_total, 
+         itpre_med.nr_ordem  
+    FROM dbamv.pre_med
+         inner join dbamv.itpre_med on itpre_med.cd_pre_med = pre_med.cd_pre_med
+                                   and ((itpre_med.sn_cancelado &lt;&gt; 'S') OR (itpre_med.sn_cancelado IS NULL))
+                                   --AND ITPRE_MED.CD_ITPRE_PAD IS NOT NULL
+         inner join dbamv.atendime on atendime.cd_atendimento = pre_med.cd_atendimento
+         inner join dbamv.for_apl on for_apl.cd_for_apl = itpre_med.cd_for_apl
+         inner join dbamv.paciente on paciente.cd_paciente  = atendime.cd_paciente
+         inner join dbamv.tip_presc on tip_presc.cd_tip_presc = itpre_med.cd_tip_presc   
+                                   AND tip_presc.cd_tip_esq IN ('QMT', 'MED', 'SOR')      
+         inner join dbamv.prestador on prestador.cd_prestador = pre_med.cd_prestador
+                                   --and prestador.cd_tip_presta = 8  
+         left join dbamv.citpre_med on citpre_med.cd_itpre_med = itpre_med.cd_itpre_med
+                                   and citpre_med.tp_componente = 'M'
+         left join (select citpre_med.cd_itpre_med
+                          ,citpre_med.cd_tip_presc 
+                          ,citpre_med.cd_uni_pro
+                          ,citpre_med.qt_componente
+                          ,citpre_med.cd_produto
+                          ,itpre_pad.cd_pre_pad 
+                          ,tip_presc_2.ds_tip_presc
+                          ,tip_presc_2.cd_tip_esq                       
+                      from (SELECT *   
+                              FROM dbamv.tip_presc 
+                             WHERE cd_tip_esq IN ('QMT', 'MED','PQT', 'SOR')) tip_presc_2 
+                           left join dbamv.citpre_med on citpre_med.cd_tip_presc = tip_presc_2.cd_tip_presc
+                                                     and citpre_med.tp_componente = 'M'  --and CD_PRE_MED = 3150
+                           left join dbamv.itpre_pad on itpre_pad.cd_itpre_pad = citpre_med.cd_itpre_med            
+                    ) comp on comp.cd_itpre_med = itpre_med.cd_itpre_med  
+         left join dbamv.produto prod_item on prod_item.cd_produto = comp.cd_produto        
+         left join dbamv.itpre_pad on itpre_pad.cd_itpre_pad = itpre_med.cd_itpre_pad
+         left join dbamv.pre_pad on pre_pad.cd_pre_pad  = itpre_pad.cd_pre_pad
+         left join dbamv.ciclo_trtm_protocolo_prepad on ciclo_trtm_protocolo_prepad.cd_pre_pad = itpre_pad.cd_pre_pad
+         left join dbamv.ciclo_tratamento_protocolo on ciclo_tratamento_protocolo.cd_ciclo_tratamento_protocolo = ciclo_trtm_protocolo_prepad.cd_ciclo_tratamento_protocolo
+         left join dbamv.protocolo on protocolo.cd_protocolo = ciclo_tratamento_protocolo.cd_protocolo
+         inner join dbamv.hritpre_med on hritpre_med.cd_itpre_med = itpre_med.cd_itpre_med
+                                    --AND HRITPRTIP_ESQ E_MED.NR_DIA = 1
+         inner join dbamv.uni_pro on uni_pro.cd_uni_pro = itpre_med.cd_uni_pro         
+         left join (SELECT *
+                      FROM dbamv.uni_pro) uni_pro_item on uni_pro_item.cd_uni_pro = comp.cd_uni_pro
+         left join dbamv.solsai_pro on solsai_pro.cd_pre_med = pre_med.cd_pre_med
+         left join dbamv.produto on produto.cd_produto = tip_presc.cd_produto    
+         left join dbamv.produto_estabilidade on produto_estabilidade.cd_produto = produto.cd_produto
+         inner join dbamv.convenio on convenio.cd_convenio = atendime.cd_convenio                                          
+   where 
+   pre_med.cd_objeto = 681 
+   AND PRE_MED.CD_PRE_MED = {cd_prescricao} --3150 --2694631
+    --AND PRE_MED.DT_PRE_MED &gt;= '05/11/2011'
+UNION ALL  -- PROVINIENTE DA AVALIÇÃO FARMACÊUTICA
+SELECT /*+rule*/ distinct pre_med.cd_atendimento, pre_med.cd_pre_med, convenio.nm_convenio, pre_med.dt_pre_med,
+         paciente.cd_paciente, paciente.nm_paciente, to_char(paciente.dt_nascimento,'dd/mm/yyyy') dt_nascimento, novo.cd_itpre_med,
+         --solsai_pro.cd_solsai_pro,
+         tip_presc.ds_tip_presc item_principal,
+         novo.qt_itpre_med
+         --novo.qt_itpre_med * uni_pro.vl_fator
+         || ' '
+         || uni_pro.cd_unidade ds_unidade_principal,        
+         --|| uni_pro.ds_unidade ds_unidade_principal,
+       
+         case
+            when comp.cd_tip_esq is not null then
+         '|--&gt; ' || comp.ds_tip_presc
+         end ds_tip_presc_item,       
+         case
+            when comp.cd_tip_esq is not null then 
+            comp.qt_componente * uni_pro_item.vl_fator
+         || ' '
+         || uni_pro_item.cd_unidade
+         --|| uni_pro_item.ds_unidade
+         end  ds_unidade_item,
+         produto_estabilidade.vl_tempo_validade || ' ' ||produto_estabilidade.tp_tempo_validade estabilidade,
+         decode(produto_estabilidade.nr_tempo_infusao,null,null,produto_estabilidade.nr_tempo_infusao || ' ' || produto_estabilidade.tp_tempo_infusao) tempo_infusao,
+         case
+            when uni_pro_item.cd_unidade = 'ML' then comp.qt_componente * uni_pro_item.vl_fator 
+            when prod_item.cd_dcb is not null and prod_item.cd_sican is not null then round(((comp.qt_componente * to_number(prod_item.cd_dcb, '9G999D99')) / to_number(prod_item.cd_sican, '9G999D99')),2)            
+            else 0
+         end vl_comp,
+         novo.ds_itpre_med observacao,
+         for_apl.cd_for_apl || '-' || for_apl.ds_for_apl via,
+         protocolo.ds_protocolo, 
+         prestador.nm_prestador, hritpre_med.nr_dia,
+         pre_med.nr_ciclo || ' / D' || nr_sessao AS ciclo,
+         case
+            when uni_pro.cd_unidade = 'ML' then itpre_med.qt_itpre_med * uni_pro.vl_fator
+            when produto.cd_dcb is not null and produto.cd_sican is not null then round(((novo.qt_itpre_med * to_number(produto.cd_dcb, '9G999D99')) / to_number(produto.cd_sican, '999999.99')),2)
+            else 0             
+         end vl_total, 
+         novo.nr_ordem   
+    FROM dbamv.pre_med
+         inner join dbamv.itpre_med on itpre_med.cd_pre_med = pre_med.cd_pre_med
+                                   and ((itpre_med.sn_cancelado = 'S') OR (itpre_med.sn_cancelado IS NOT NULL))
+                                   and itpre_med.cd_prest_canc in (select cd_prestador
+                                                                  from dbamv.prestador
+                                                                 where prestador.cd_tip_presta = 32
+                                                                 )
+         inner join dbamv.itpre_med novo on novo.cd_itpre_med_copia = itpre_med.cd_itpre_med 
+                                        and ((novo.sn_cancelado &lt;&gt; 'S') OR (novo.sn_cancelado IS NULL))       
+                                        and novo.cd_pre_med &lt;&gt; itpre_med.cd_pre_med        
+         inner join dbamv.atendime on atendime.cd_atendimento = pre_med.cd_atendimento
+         inner join dbamv.for_apl on for_apl.cd_for_apl = novo.cd_for_apl
+         inner join dbamv.paciente on paciente.cd_paciente  = atendime.cd_paciente
+         inner join dbamv.tip_presc on tip_presc.cd_tip_presc = novo.cd_tip_presc   
+                                   AND tip_presc.cd_tip_esq IN ('QMT', 'MED', 'SOR')      
+         inner join dbamv.prestador on prestador.cd_prestador = pre_med.cd_prestador
+                                   --and prestador.cd_tip_presta = 8
+         left join dbamv.citpre_med on citpre_med.cd_itpre_med = novo.cd_itpre_med
+                                   and citpre_med.tp_componente = 'M'
+         left join (select citpre_med.cd_itpre_med
+                          ,citpre_med.cd_tip_presc 
+                          ,citpre_med.cd_uni_pro
+                          ,citpre_med.qt_componente
+                          ,citpre_med.cd_produto
+                          ,itpre_pad.cd_pre_pad 
+                          ,tip_presc_2.ds_tip_presc
+                          ,tip_presc_2.cd_tip_esq                       
+                      from (SELECT *   
+                              FROM dbamv.tip_presc 
+                             WHERE cd_tip_esq IN ('MED', 'QMT','PQT','SOR')) tip_presc_2 
+                           left join dbamv.citpre_med on citpre_med.cd_tip_presc = tip_presc_2.cd_tip_presc
+                                                     and citpre_med.tp_componente = 'M'  --and CD_PRE_MED = 3150
+                           left join dbamv.itpre_pad on itpre_pad.cd_itpre_pad = citpre_med.cd_itpre_med            
+                    ) comp on comp.cd_itpre_med = novo.cd_itpre_med  
+         left join dbamv.produto prod_item on prod_item.cd_produto = comp.cd_produto        
+         left join dbamv.itpre_pad on itpre_pad.cd_itpre_pad = novo.cd_itpre_pad
+         left join dbamv.pre_pad on pre_pad.cd_pre_pad  = itpre_pad.cd_pre_pad
+         left join dbamv.ciclo_trtm_protocolo_prepad on ciclo_trtm_protocolo_prepad.cd_pre_pad = itpre_pad.cd_pre_pad
+         left join dbamv.ciclo_tratamento_protocolo on ciclo_tratamento_protocolo.cd_ciclo_tratamento_protocolo = ciclo_trtm_protocolo_prepad.cd_ciclo_tratamento_protocolo
+         left join dbamv.protocolo on protocolo.cd_protocolo = ciclo_tratamento_protocolo.cd_protocolo
+         inner join dbamv.hritpre_med on hritpre_med.cd_itpre_med = novo.cd_itpre_med
+                                    --AND HRITPRTIP_ESQ E_MED.NR_DIA = 1
+         inner join dbamv.uni_pro on uni_pro.cd_uni_pro = novo.cd_uni_pro         
+         left join (SELECT *
+                      FROM dbamv.uni_pro) uni_pro_item on uni_pro_item.cd_uni_pro = comp.cd_uni_pro
+         left join dbamv.solsai_pro on solsai_pro.cd_pre_med = pre_med.cd_pre_med
+         left join dbamv.produto on produto.cd_produto = tip_presc.cd_produto  
+         left join dbamv.produto_estabilidade on produto_estabilidade.cd_produto = produto.cd_produto
+         inner join dbamv.convenio on convenio.cd_convenio = atendime.cd_convenio                                            
+   where 
+   pre_med.cd_objeto = 681 
+   AND PRE_MED.CD_PRE_MED = {cd_prescricao} --3150 --2694631
+    --AND PRE_MED.DT_PRE_MED &gt;= '05/11/2011' 
+UNION ALL  -- PROVINIENTE DA AVALIÇÃO FARMACÊUTICA ** PRODUTO NOVO
+SELECT /*+rule*/ distinct pre_med.cd_atendimento, pre_med.cd_pre_med, convenio.nm_convenio, pre_med.dt_pre_med,
+         paciente.cd_paciente, paciente.nm_paciente, to_char(paciente.dt_nascimento,'dd/mm/yyyy') dt_nascimento,
+         novo.cd_itpre_med,
+         --solsai_pro.cd_solsai_pro,
+         tip_presc.ds_tip_presc item_principal,
+         novo.qt_itpre_med
+         --novo.qt_itpre_med * uni_pro.vl_fator
+         || ' '
+         || uni_pro.cd_unidade ds_unidade_principal,        
+         --|| uni_pro.ds_unidade ds_unidade_principal,
+         case
+            when comp.cd_tip_esq is not null then
+         '|--&gt; ' || comp.ds_tip_presc
+         end ds_tip_presc_item,       
+         case
+            when comp.cd_tip_esq is not null then 
+            comp.qt_componente * uni_pro_item.vl_fator
+         || ' '
+         || uni_pro_item.cd_unidade
+         --|| uni_pro_item.ds_unidade
+         end  ds_unidade_item,
+         produto_estabilidade.vl_tempo_validade || ' ' ||produto_estabilidade.tp_tempo_validade estabilidade,
+         decode(produto_estabilidade.nr_tempo_infusao,null,null,produto_estabilidade.nr_tempo_infusao || ' ' || produto_estabilidade.tp_tempo_infusao) tempo_infusao,
+         case
+            when uni_pro_item.cd_unidade = 'ML' then comp.qt_componente * uni_pro_item.vl_fator 
+            when prod_item.cd_dcb is not null and prod_item.cd_sican is not null then round(((comp.qt_componente * to_number(prod_item.cd_dcb, '9G999D99')) / to_number(prod_item.cd_sican, '9G999D99')),2)            
+            else 0
+         end vl_comp,
+         novo.ds_itpre_med observacao,
+         for_apl.cd_for_apl || '-' || for_apl.ds_for_apl via,
+         protocolo.ds_protocolo, 
+         prestador.nm_prestador, hritpre_med.nr_dia,
+         pre_med.nr_ciclo || ' / D' || nr_sessao AS ciclo,   
+         case
+            when uni_pro.cd_unidade = 'ML' then itpre_med.qt_itpre_med * uni_pro.vl_fator
+            when produto.cd_dcb is not null and produto.cd_sican is not null then round(((novo.qt_itpre_med * to_number(produto.cd_dcb, '9G999D99')) / to_number(produto.cd_sican, '999999.99')),2)
+            else 0 
+         end vl_total,        
+         novo.nr_ordem  
+    FROM dbamv.pre_med
+         inner join dbamv.itpre_med on itpre_med.cd_pre_med = pre_med.cd_pre_med
+                                   and ((itpre_med.sn_cancelado = 'S') OR (itpre_med.sn_cancelado IS NOT NULL))
+                                   and itpre_med.cd_prest_canc in (select cd_prestador
+                                                                  from dbamv.prestador
+                                                                 where prestador.cd_tip_presta = 32)                                                                 
+         inner join dbamv.itpre_med susp on susp.cd_itpre_med_canc = itpre_med.cd_itpre_med 
+                                        and ((susp.sn_cancelado = 'S') OR (susp.sn_cancelado IS NOT NULL))       
+                                        and susp.cd_pre_med &lt;&gt; itpre_med.cd_pre_med  
+         inner join dbamv.itpre_med novo on novo.cd_pre_med = susp.cd_pre_med 
+                                        and ((novo.sn_cancelado &lt;&gt; 'S') OR (novo.sn_cancelado IS NULL))                                         
+                                        and novo.sn_horario_gerado = 'S'     
+                                        and novo.cd_tip_presc &lt;&gt; susp.cd_tip_presc 
+                                        --and novo.cd_produto &lt;&gt; itpre_med.cd_produto
+                                        and novo.cd_itpre_med_copia is null                                                                               
+         inner join dbamv.atendime on atendime.cd_atendimento = pre_med.cd_atendimento
+         inner join dbamv.for_apl on for_apl.cd_for_apl = novo.cd_for_apl
+         inner join dbamv.paciente on paciente.cd_paciente  = atendime.cd_paciente
+         inner join dbamv.tip_presc on tip_presc.cd_tip_presc = novo.cd_tip_presc   
+                                   AND tip_presc.cd_tip_esq IN ('MED', 'QMT','PQT', 'SOR')      
+         inner join dbamv.prestador on prestador.cd_prestador = pre_med.cd_prestador
+                                   --and prestador.cd_tip_presta = 8
+         left join dbamv.citpre_med on citpre_med.cd_itpre_med = novo.cd_itpre_med
+                                   and citpre_med.tp_componente = 'M'
+         left join (select citpre_med.cd_itpre_med
+                          ,citpre_med.cd_tip_presc 
+                          ,citpre_med.cd_uni_pro
+                          ,citpre_med.qt_componente
+                          ,citpre_med.cd_produto
+                          ,itpre_pad.cd_pre_pad 
+                          ,tip_presc_2.ds_tip_presc
+                          ,tip_presc_2.cd_tip_esq                       
+                      from (SELECT *   
+                              FROM dbamv.tip_presc 
+                             WHERE cd_tip_esq IN ('MNF', 'MDO', 'SOR','MDN')) tip_presc_2 
+                           left join dbamv.citpre_med on citpre_med.cd_tip_presc = tip_presc_2.cd_tip_presc
+                                                     --and citpre_med.tp_componente = 'M'  --and CD_PRE_MED = 3150
+                           left join dbamv.itpre_pad on itpre_pad.cd_itpre_pad = citpre_med.cd_itpre_med            
+                    ) comp on comp.cd_itpre_med = novo.cd_itpre_med  
+         left join dbamv.produto prod_item on prod_item.cd_produto = comp.cd_produto        
+         left join dbamv.itpre_pad on itpre_pad.cd_itpre_pad = itpre_med.cd_itpre_pad
+         left join dbamv.pre_pad on pre_pad.cd_pre_pad  = itpre_pad.cd_pre_pad
+         left join dbamv.ciclo_trtm_protocolo_prepad on ciclo_trtm_protocolo_prepad.cd_pre_pad = itpre_pad.cd_pre_pad
+         left join dbamv.ciclo_tratamento_protocolo on ciclo_tratamento_protocolo.cd_ciclo_tratamento_protocolo = ciclo_trtm_protocolo_prepad.cd_ciclo_tratamento_protocolo
+         left join dbamv.protocolo on protocolo.cd_protocolo = ciclo_tratamento_protocolo.cd_protocolo
+         inner join dbamv.hritpre_med on hritpre_med.cd_itpre_med = novo.cd_itpre_med
+                                    --AND HRITPRTIP_ESQ E_MED.NR_DIA = 1
+         inner join dbamv.uni_pro on uni_pro.cd_uni_pro = novo.cd_uni_pro         
+         left join (SELECT *
+                      FROM dbamv.uni_pro) uni_pro_item on uni_pro_item.cd_uni_pro = comp.cd_uni_pro
+         left join dbamv.solsai_pro on solsai_pro.cd_pre_med = pre_med.cd_pre_med
+         left join dbamv.produto on produto.cd_produto = tip_presc.cd_produto 
+         left join dbamv.produto_estabilidade on produto_estabilidade.cd_produto = produto.cd_produto  
+         inner join dbamv.convenio on convenio.cd_convenio = atendime.cd_convenio                                           
+   where 
+   pre_med.cd_objeto = 681 
+   AND PRE_MED.CD_PRE_MED = {cd_prescricao}  
+ORDER BY nr_ordem</SqlCommand><Type>Table</Type></FONTE></DataSources><Relations count="0" isList="true"/><Report isRef="0"/><Resources count="0" isList="true"/><Variables count="1" isList="true"><value>,cd_prescricao,Informe_x0020_o_x0020_código_x0020_da_x0020_prescrição,,System.Int32,_x0030_,False,False,True,False,_x003c__x003f_xml_x0020_version_x003d__x0022_1_x002e_0_x0022__x0020_encoding_x003d__x0022_UTF_x002d_8_x0022__x003f__x003e__x003c_StiSerializer_x0020_application_x003d__x0022_State_x0022__x0020_type_x003d__x0022_Java_x0022__x0020_version_x003d__x0022_1_x002e_2_x0022__x003e__x003c_BindingValue_x003e_False_x003c__x002f_BindingValue_x003e__x003c_BindingValuesColumn_x002f__x003e__x003c_CheckedStates_x0020_count_x003d__x0022_0_x0022__x0020_isList_x003d__x0022_true_x0022__x002f__x003e__x003c_DateTimeType_x003e_DateAndTime_x003c__x002f_DateTimeType_x003e__x003c_Keys_x0020_count_x003d__x0022_0_x0022__x0020_isList_x003d__x0022_true_x0022__x002f__x003e__x003c_SortDirection_x003e_None_x003c__x002f_SortDirection_x003e__x003c_SortField_x003e_Label_x003c__x002f_SortField_x003e__x003c_Values_x0020_count_x003d__x0022_0_x0022__x0020_isList_x003d__x0022_true_x0022__x002f__x003e__x003c__x002f_StiSerializer_x003e_,,False,FromVariable</value></Variables></Dictionary><EngineVersion>EngineV2</EngineVersion><GlobalizationStrings count="0" isList="true"/><IsSubmit>False</IsSubmit><JsonReport>False</JsonReport><Key>c9cab6ea863e470d8669458eea3d872b</Key><MetaTags count="1" isList="true"><value>reportId,_x0031_20</value></MetaTags><Pages count="1" isList="true"><Page1 Ref="4" isKey="true" type="Page"><Border>None;[0:0:0];2.0;Solid;False;4.0;[0:0:0]</Border><Brush>[255:255:255]</Brush><Components count="4" isList="true"><PageHeaderBand1 Ref="5" isKey="true" type="PageHeaderBand"><Brush>Transparent</Brush><ClientRectangle>0,0.4,9,2.4</ClientRectangle><Components count="21" isList="true"><Text1 Ref="6" isKey="true" type="Text"><Brush>Transparent</Brush><ClientRectangle>1.8,0,7,0.6</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,8,Bold</Font><HorAlignment>Center</HorAlignment><Margins>0,0,0,0</Margins><Name>Text1</Name><Page isRef="4"/><Parent isRef="5"/><Text>HOSPITAL NAPOLEÃO LAUREANO</Text><TextBrush>Black</TextBrush><TextOptions>HotkeyPrefix=None, LineLimit=False, RightToLeft=False, Trimming=None, WordWrap=True, Angle=0, FirstTabOffset=40, DistanceBetweenTabs=20,</TextOptions><Type>Expression</Type></Text1><Text4 Ref="7" isKey="true" type="Text"><Brush>Transparent</Brush><ClientRectangle>0,0.8,1.8,0.4</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,8</Font><HorAlignment>Center</HorAlignment><Margins>0,0,0,0</Margins><Name>Text4</Name><Page isRef="4"/><Parent isRef="5"/><Text>Atendimento:</Text><TextBrush>[0:0:0]</TextBrush><Type>Expression</Type></Text4><Text5 Ref="8" isKey="true" type="Text"><Brush>Transparent</Brush><ClientRectangle>1.8,0.8,1.2,0.4</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,8</Font><Margins>0,0,0,0</Margins><Name>Text5</Name><Page isRef="4"/><Parent isRef="5"/><Text>{FONTE.CD_ATENDIMENTO}</Text><TextBrush>[0:0:0]</TextBrush><Type>DataColumn</Type></Text5><Text2 Ref="9" isKey="true" type="Text"><Brush>Transparent</Brush><ClientRectangle>0,1.2,1.4,0.4</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,8</Font><HorAlignment>Center</HorAlignment><Margins>0,0,0,0</Margins><Name>Text2</Name><Page isRef="4"/><Parent isRef="5"/><Text>Paciente: </Text><TextBrush>[0:0:0]</TextBrush><Type>Expression</Type></Text2><Text6 Ref="10" isKey="true" type="Text"><Brush>Transparent</Brush><ClientRectangle>3,0.8,1.4,0.4</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,8</Font><HorAlignment>Center</HorAlignment><Margins>0,0,0,0</Margins><Name>Text6</Name><Page isRef="4"/><Parent isRef="5"/><Text>Prescrição:</Text><TextBrush>[0:0:0]</TextBrush><Type>Expression</Type></Text6><Text7 Ref="11" isKey="true" type="Text"><Brush>Transparent</Brush><ClientRectangle>4.4,0.8,1,0.4</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,8</Font><Margins>0,0,0,0</Margins><Name>Text7</Name><Page isRef="4"/><Parent isRef="5"/><Text>{FONTE.CD_PRE_MED}</Text><TextBrush>[0:0:0]</TextBrush></Text7><Text3 Ref="12" isKey="true" type="Text"><Brush>Transparent</Brush><ClientRectangle>1.4,1.2,5.6,0.4</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,8</Font><Margins>0,0,0,0</Margins><Name>Text3</Name><Page isRef="4"/><Parent isRef="5"/><Text>{FONTE.NM_PACIENTE}</Text><TextBrush>[0:0:0]</TextBrush></Text3><Text8 Ref="13" isKey="true" type="Text"><Brush>Transparent</Brush><ClientRectangle>0,1.6,1.6,0.4</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,8</Font><Guid>b0612ac4583549d4914640d884b62fc3</Guid><HorAlignment>Center</HorAlignment><Margins>0,0,0,0</Margins><Name>Text8</Name><Page isRef="4"/><Parent isRef="5"/><Text>Médico(a): </Text><TextBrush>[0:0:0]</TextBrush><Type>Expression</Type></Text8><Text9 Ref="14" isKey="true" type="Text"><Brush>Transparent</Brush><ClientRectangle>1.6,1.6,5.4,0.4</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,7</Font><Margins>0,0,0,0</Margins><Name>Text9</Name><Page isRef="4"/><Parent isRef="5"/><Text>{FONTE.NM_PRESTADOR}</Text><TextBrush>[0:0:0]</TextBrush><VertAlignment>Center</VertAlignment></Text9><Text10 Ref="15" isKey="true" type="Text"><Brush>Transparent</Brush><ClientRectangle>0,2,1.6,0.4</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,8</Font><Guid>2cd03a0c1754424e887c3c50468c076a</Guid><HorAlignment>Center</HorAlignment><Margins>0,0,0,0</Margins><Name>Text10</Name><Page isRef="4"/><Parent isRef="5"/><Text>Protocolo:</Text><TextBrush>[0:0:0]</TextBrush><Type>Expression</Type></Text10><Text11 Ref="16" isKey="true" type="Text"><Brush>Transparent</Brush><ClientRectangle>1.6,2,5,0.4</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,7</Font><Margins>0,0,0,0</Margins><Name>Text11</Name><Page isRef="4"/><Parent isRef="5"/><Text>{FONTE.DS_PROTOCOLO}</Text><TextBrush>[0:0:0]</TextBrush><VertAlignment>Center</VertAlignment></Text11><Text17 Ref="17" isKey="true" type="Text"><Brush>Transparent</Brush><ClientRectangle>5.4,0.8,0.8,0.4</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,8</Font><Guid>34cf54a489b648ad8e7442b829ca5e76</Guid><Margins>0,0,0,0</Margins><Name>Text17</Name><Page isRef="4"/><Parent isRef="5"/><Text>Ciclo:</Text><TextBrush>[0:0:0]</TextBrush><Type>Expression</Type></Text17><Text18 Ref="18" isKey="true" type="Text"><Brush>Transparent</Brush><ClientRectangle>6.2,0.8,1,0.4</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,8</Font><Margins>0,0,0,0</Margins><Name>Text18</Name><Page isRef="4"/><Parent isRef="5"/><Text>{FONTE.CICLO}</Text><TextBrush>[0:0:0]</TextBrush><Type>DataColumn</Type></Text18><Text21 Ref="19" isKey="true" type="Text"><Brush>Transparent</Brush><ClientRectangle>2.29,2.39,4.39,0.41</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,8</Font><Guid>e5ee5975fa0847348999c0d3859b7cc6</Guid><HorAlignment>Center</HorAlignment><Margins>0,0,0,0</Margins><Name>Text21</Name><Page isRef="4"/><Parent isRef="5"/><Text>MEDICAÇÃO</Text><TextBrush>[0:0:0]</TextBrush><Type>Expression</Type></Text21><Text23 Ref="20" isKey="true" type="Text"><Brush>Transparent</Brush><ClientRectangle>7.2,1.6,1.6,0.4</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,8</Font><Margins>0,0,0,0</Margins><Name>Text23</Name><Page isRef="4"/><Parent isRef="5"/><Text>{FONTE.DT_NASCIMENTO}</Text><TextBrush>Black</TextBrush><Type>DataColumn</Type></Text23><Text24 Ref="21" isKey="true" type="Text"><Brush>Transparent</Brush><ClientRectangle>7.2,1.2,1.4,0.4</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,8</Font><Guid>d579f391e2a84fa690781fa9dd01fb46</Guid><HorAlignment>Center</HorAlignment><Margins>0,0,0,0</Margins><Name>Text24</Name><Page isRef="4"/><Parent isRef="5"/><Text>Dt. Nasc: </Text><TextBrush>[0:0:0]</TextBrush><Type>Expression</Type></Text24><Text25 Ref="22" isKey="true" type="Text"><Brush>Transparent</Brush><ClientRectangle>7.6,0.8,1.2,0.4</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,7</Font><HorAlignment>Right</HorAlignment><Margins>0,0,0,0</Margins><Name>Text25</Name><Page isRef="4"/><Parent isRef="5"/><Text>{FONTE.DT_PRE_MED}</Text><TextBrush>Black</TextBrush><TextFormat Ref="23" isKey="true" type="DateFormat"><State>None</State><StringFormat>dd/MM/yyyy</StringFormat></TextFormat></Text25><Text30 Ref="24" isKey="true" type="Text"><Brush>Transparent</Brush><ClientRectangle>7.87,2.39,1.12,0.41</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,7,Bold</Font><Guid>695354b4dc6f4c158d3f5f6fda403485</Guid><HorAlignment>Center</HorAlignment><Margins>0,0,0,0</Margins><Name>Text30</Name><Page isRef="4"/><Parent isRef="5"/><Text>Volume</Text><TextBrush>[0:0:0]</TextBrush><Type>Expression</Type><VertAlignment>Bottom</VertAlignment></Text30><Text28 Ref="25" isKey="true" type="Text"><Brush>Transparent</Brush><ClientRectangle>6.6,2,2.4,0.4</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,7</Font><Margins>0,0,0,0</Margins><Name>Text28</Name><Page isRef="4"/><Parent isRef="5"/><Text>{FONTE.NM_CONVENIO}</Text><TextBrush>[0:0:0]</TextBrush><VertAlignment>Center</VertAlignment></Text28><Image1 Ref="26" isKey="true" type="Image"><Brush>Transparent</Brush><ClientRectangle>0,0,1.8,0.8</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><IconColor>68, 114, 196</IconColor><ImageBytes>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</ImageBytes><Margins>0,0,0,0</Margins><Name>Image1</Name><Page isRef="4"/><Parent isRef="5"/><Stretch>True</Stretch></Image1><HorizontalLinePrimitive1 Ref="27" isKey="true" type="HorizontalLinePrimitive"><ClientRectangle>0,2.4,9,0.0254</ClientRectangle><Color>Black</Color><EndCap Ref="28" isKey="true" type="Cap"><Color>Black</Color></EndCap><Expressions count="0" isList="true"/><Name>HorizontalLinePrimitive1</Name><Page isRef="4"/><Parent isRef="5"/><StartCap Ref="29" isKey="true" type="Cap"><Color>Black</Color></StartCap></HorizontalLinePrimitive1></Components><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Name>PageHeaderBand1</Name><Page isRef="4"/><Parent isRef="4"/></PageHeaderBand1><GroupHeaderBand1 Ref="30" isKey="true" type="GroupHeaderBand"><Brush>Transparent</Brush><CanBreak>True</CanBreak><ClientRectangle>0,3.6,9,0.4</ClientRectangle><Components count="3" isList="true"><Text13 Ref="31" isKey="true" type="Text"><Brush>[216:216:216]</Brush><ClientRectangle>0,0,6,0.4</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,8</Font><Margins>0,0,0,0</Margins><Name>Text13</Name><Page isRef="4"/><Parent isRef="30"/><Text>{FONTE.ITEM_PRINCIPAL}</Text><TextBrush>[0:0:0]</TextBrush></Text13><Text14 Ref="32" isKey="true" type="Text"><Brush>[216:216:216]</Brush><ClientRectangle>6.2,0.01,1.52,0.38</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,8</Font><HorAlignment>Right</HorAlignment><Margins>0,0,0,0</Margins><Name>Text14</Name><Page isRef="4"/><Parent isRef="30"/><Text>{FONTE.DS_UNIDADE_PRINCIPAL}</Text><TextBrush>[0:0:0]</TextBrush></Text14><Text27 Ref="33" isKey="true" type="Text"><Brush>Transparent</Brush><ClientRectangle>7.82,0.03,1.17,0.41</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,8,Bold</Font><HorAlignment>Right</HorAlignment><Margins>0,0,0,0</Margins><Name>Text27</Name><Page isRef="4"/><Parent isRef="30"/><Text>{FONTE.VL_TOTAL} ml</Text><TextBrush>Black</TextBrush><TextFormat Ref="34" isKey="true" type="NumberFormat"><DecimalSeparator>,</DecimalSeparator><GroupSeparator>.</GroupSeparator><NegativePattern>1</NegativePattern><State>None</State><UseLocalSetting>False</UseLocalSetting></TextFormat><Type>Expression</Type></Text27></Components><Condition>{FONTE.CD_ITPRE_MED}</Condition><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><KeepGroupTogether>True</KeepGroupTogether><Name>GroupHeaderBand1</Name><Page isRef="4"/><Parent isRef="4"/><ResetPageNumber>False</ResetPageNumber></GroupHeaderBand1><DataBand1 Ref="35" isKey="true" type="DataBand"><Brush>Transparent</Brush><ClientRectangle>0,4.8,9,0.4</ClientRectangle><Components count="3" isList="true"><Text15 Ref="36" isKey="true" type="Text"><Brush>[255:255:255]</Brush><ClientRectangle>0,0,6,0.4</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,7</Font><Margins>0,0,0,0</Margins><Name>Text15</Name><Page isRef="4"/><Parent isRef="35"/><Text>{FONTE.DS_TIP_PRESC_ITEM}</Text><TextBrush>[0:0:0]</TextBrush><VertAlignment>Center</VertAlignment></Text15><Text16 Ref="37" isKey="true" type="Text"><Brush>[255:255:255]</Brush><ClientRectangle>6.2,0,1.6,0.4</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,8</Font><HorAlignment>Right</HorAlignment><Margins>0,0,0,0</Margins><Name>Text16</Name><Page isRef="4"/><Parent isRef="35"/><Text>{FONTE.DS_UNIDADE_ITEM}</Text><TextBrush>[0:0:0]</TextBrush></Text16><Text32 Ref="38" isKey="true" type="Text"><Brush>Transparent</Brush><ClientRectangle>7.8,0,1.19,0.41</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,8,Bold</Font><HideZeros>True</HideZeros><HorAlignment>Right</HorAlignment><Margins>0,0,0,0</Margins><Name>Text32</Name><Page isRef="4"/><Parent isRef="35"/><Printable>False</Printable><Text>{FONTE.VL_COMP} ml</Text><TextBrush>Black</TextBrush><Type>Expression</Type></Text32></Components><Conditions count="0" isList="true"/><DataRelationName isNull="true"/><DataSourceName>FONTE</DataSourceName><Expressions count="0" isList="true"/><Filters count="0" isList="true"/><KeepDetails>None</KeepDetails><LimitRows/><Name>DataBand1</Name><Page isRef="4"/><Parent isRef="4"/><Sort count="0" isList="true"/></DataBand1><GroupFooterBand1 Ref="39" isKey="true" type="GroupFooterBand"><Brush>Transparent</Brush><CanBreak>True</CanBreak><ClientRectangle>0,6,9,3</ClientRectangle><Components count="12" isList="true"><Text19 Ref="40" isKey="true" type="Text"><Brush>Transparent</Brush><ClientRectangle>0,0.8,0.6,0.4</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,8</Font><Guid>64885628233143b6b40db43ed433a36a</Guid><Margins>0,0,0,0</Margins><Name>Text19</Name><Page isRef="4"/><Parent isRef="39"/><Text>Via:</Text><TextBrush>[0:0:0]</TextBrush><Type>Expression</Type></Text19><Text20 Ref="41" isKey="true" type="Text"><Brush>Transparent</Brush><ClientRectangle>0.6,0.8,3,0.4</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,8</Font><Margins>0,0,0,0</Margins><Name>Text20</Name><Page isRef="4"/><Parent isRef="39"/><Text>{FONTE.VIA}</Text><TextBrush>[0:0:0]</TextBrush></Text20><Text12 Ref="42" isKey="true" type="Text"><Brush>Transparent</Brush><ClientRectangle>0,0,9,0.6</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,8</Font><Margins>0,0,0,0</Margins><Name>Text12</Name><Page isRef="4"/><Parent isRef="39"/><Text>Observação: {FONTE.OBSERVACAO}</Text><TextBrush>Black</TextBrush><Type>Expression</Type></Text12><BarCode1 Ref="43" isKey="true" type="Stimulsoft.Report.BarCodes.StiBarCode"><AutoScale>True</AutoScale><BackColor>0, 255, 255, 255</BackColor><BarCodeType Ref="44" isKey="true" type="Stimulsoft.Report.BarCodes.StiEAN128AutoBarCodeType"/><ClientRectangle>0,1.4,3.6,1.2</ClientRectangle><Code>{FONTE.CD_ATENDIMENTO}</Code><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,8,Bold</Font><ForeColor>Black</ForeColor><Name>BarCode1</Name><Page isRef="4"/><Parent isRef="39"/><ShowLabelText>False</ShowLabelText><ShowQuietZones>False</ShowQuietZones></BarCode1><Text26 Ref="45" isKey="true" type="Text"><Brush>Transparent</Brush><ClientRectangle>3.8,0.8,1.2,0.4</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,8</Font><Margins>0,0,0,0</Margins><Name>Text26</Name><Page isRef="4"/><Parent isRef="39"/><Text>Vol.Total:</Text><TextBrush>Black</TextBrush><TextFormat Ref="46" isKey="true" type="NumberFormat"><GroupSeparator>,</GroupSeparator><NegativePattern>2</NegativePattern><State>None</State><UseLocalSetting>False</UseLocalSetting></TextFormat><Type>Expression</Type><VertAlignment>Center</VertAlignment></Text26><Text22 Ref="47" isKey="true" type="Text"><Brush>Transparent</Brush><ClientRectangle>0,2.6,9,0.4</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,7,Bold| Italic</Font><Guid>57052e92df904c18acb01bff9a74f9db</Guid><HorAlignment>Center</HorAlignment><Margins>0,0,0,0</Margins><Name>Text22</Name><Page isRef="4"/><Parent isRef="39"/><Text>Farmacêutica Responsável: CRF-2653 Raquel Lacerda Brasileiro Luckwu</Text><TextBrush>[0:0:0]</TextBrush><Type>Expression</Type></Text22><Text31 Ref="48" isKey="true" type="Text"><Brush>Transparent</Brush><ClientRectangle>5,0.78,1.32,0.38</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,8,Bold</Font><HideZeros>True</HideZeros><Margins>0,0,0,0</Margins><Name>Text31</Name><Page isRef="4"/><Parent isRef="39"/><ProcessAt>EndOfPage</ProcessAt><Text>{(FONTE.VL_TOTAL)+Sum(FONTE.VL_COMP)} ml</Text><TextBrush>[0:0:0]</TextBrush><Type>Expression</Type><VertAlignment>Center</VertAlignment></Text31><Text29 Ref="49" isKey="true" type="Text"><Brush>Transparent</Brush><ClientRectangle>5.2,1.4,0.6,0.4</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,7</Font><HorAlignment>Right</HorAlignment><Margins>0,0,0,0</Margins><Name>Text29</Name><Page isRef="4"/><Parent isRef="39"/><Text>{FONTE.ESTABILIDADE}</Text><TextBrush>Black</TextBrush><VertAlignment>Center</VertAlignment></Text29><Text33 Ref="50" isKey="true" type="Text"><Brush>Transparent</Brush><ClientRectangle>3.8,1.4,1.4,0.4</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,7</Font><Guid>b4efd424bff440829bc277a5dbe09175</Guid><Margins>0,0,0,0</Margins><Name>Text33</Name><Page isRef="4"/><Parent isRef="39"/><Text>Estabilidade:</Text><TextBrush>Black</TextBrush><Type>Expression</Type><VertAlignment>Center</VertAlignment></Text33><Text34 Ref="51" isKey="true" type="Text"><Brush>Transparent</Brush><ClientRectangle>5.8,1.8,1,0.4</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,7</Font><HorAlignment>Right</HorAlignment><Margins>0,0,0,0</Margins><Name>Text34</Name><Page isRef="4"/><Parent isRef="39"/><Text>{FONTE.TEMPO_INFUSAO}</Text><TextBrush>Black</TextBrush><VertAlignment>Center</VertAlignment></Text34><Text35 Ref="52" isKey="true" type="Text"><Brush>Transparent</Brush><ClientRectangle>3.8,1.8,2.2,0.4</ClientRectangle><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Font>Arial,7</Font><Guid>05b66cc408d24d59bc05900cf1dfbaff</Guid><Margins>0,0,0,0</Margins><Name>Text35</Name><Page isRef="4"/><Parent isRef="39"/><Text>Tempo de Infusão:</Text><TextBrush>Black</TextBrush><Type>Expression</Type><VertAlignment>Center</VertAlignment></Text35><HorizontalLinePrimitive2 Ref="53" isKey="true" type="HorizontalLinePrimitive"><ClientRectangle>0,0.6,9,0.0254</ClientRectangle><Color>Black</Color><EndCap Ref="54" isKey="true" type="Cap"><Color>Black</Color></EndCap><Expressions count="0" isList="true"/><Guid>bbb3fa30f515402ca6f54ab27d1b39b1</Guid><Name>HorizontalLinePrimitive2</Name><Page isRef="4"/><Parent isRef="39"/><StartCap Ref="55" isKey="true" type="Cap"><Color>Black</Color></StartCap></HorizontalLinePrimitive2></Components><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Name>GroupFooterBand1</Name><NewPageAfter>True</NewPageAfter><Page isRef="4"/><Parent isRef="4"/><PrintAtBottom>True</PrintAtBottom></GroupFooterBand1></Components><Conditions count="0" isList="true"/><Expressions count="0" isList="true"/><Guid>4a6ca62ec4874712a109a7ff319564ed</Guid><Margins>0.5,0.5,0.5,0.5</Margins><MirrorMargins>False</MirrorMargins><Name>Page1</Name><Page isRef="4"/><PageHeight>10</PageHeight><PageWidth>10</PageWidth><Report isRef="0"/><Watermark Ref="56" isKey="true" type="Stimulsoft.Report.Components.StiWatermark"><EnabledExpression/><Font>Arial,100</Font><ImageHyperlink/><TextBrush>[50:0:0:0]</TextBrush></Watermark></Page1></Pages><PrinterSettings Ref="57" isKey="true" type="Stimulsoft.Report.Print.StiPrinterSettings"/><ReferencedAssemblies count="8" isList="true"><value>System.Dll</value><value>System.Drawing.Dll</value><value>System.Windows.Forms.Dll</value><value>System.Data.Dll</value><value>System.Xml.Dll</value><value>Stimulsoft.Controls.Dll</value><value>Stimulsoft.Base.Dll</value><value>Stimulsoft.Report.Dll</value></ReferencedAssemblies><RefreshTime>0</RefreshTime><ReportAlias>Relatório</ReportAlias><ReportChanged>07/02/2024 10:43:20 AM</ReportChanged><ReportCreated>08/03/2023 04:05:10 PM</ReportCreated><ReportFile>ETIQUETA_ONCOLOGIA</ReportFile><ReportGuid>6de7ee5b872744c49c6df2fc2ed5f402</ReportGuid><ReportName>Relatório</ReportName><ReportResources count="0" isList="true"/><ReportUnit>Centimeters</ReportUnit><ReportVersion>2021.3.4 from 15 May 2021, Java</ReportVersion><RetrieveOnlyUsedData>True</RetrieveOnlyUsedData><Script>using System;
+using System.Drawing;
+using System.Windows.Forms;
+using System.Data;
+using Stimulsoft.Controls;
+using Stimulsoft.Base.Drawing;
+using Stimulsoft.Report;
+using Stimulsoft.Report.Dialogs;
+using Stimulsoft.Report.Components;
+
+namespace Reports
+{
+    public class Report : Stimulsoft.Report.StiReport
+    {
+        
+        public Report()
+        {
+            this.InitializeComponent();
+        }
+
+        #region StiReport Designer generated code - do not modify
+        #endregion StiReport Designer generated code - do not modify
+    }
+}
+</Script><ScriptLanguage>CSharp</ScriptLanguage><Styles count="0" isList="true"/></StiSerializer>
